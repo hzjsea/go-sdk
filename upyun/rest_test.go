@@ -183,6 +183,27 @@ func TestMultiListParts(t *testing.T) {
 	Nil(t, err)
 	Equal(t, len(result.Parts), 1)
 }
+
+// TODO  上传部分文件 and 获取上传的文件数量
+func TestListMultipartParts(t *testing.T) {
+	// 上传部分文件
+	data10m := make([]byte, 10*1024*1024)
+	partSize := int64(3 * 1024 * 1024)
+	prefixKey := TempKey(t)
+
+	key := path.Join(prefixKey, "upload.txt")
+	initResult := testMultiUpload(t, key, data10m, partSize, []int{1, 2}, false)
+	t.Log(initResult.PartSize, initResult.Path, initResult.UploadID)
+	fmt.Println(initResult.UploadID, initResult.PartSize, initResult.Path)
+
+	result, _ := up.ListMultipartParts(initResult, &ListMultipartPartsConfig{})
+	for _, part := range result.Parts {
+		t.Log(part.Etag, part.Id, part.Size)
+	}
+	t.Log(result.Parts[len(result.Parts)-1])
+
+}
+
 func TestMultiGetUpload(t *testing.T) {
 	data10m := make([]byte, 10*1024*1024)
 	partSize := int64(3 * 1024 * 1024)
@@ -224,6 +245,38 @@ func TestResumePut(t *testing.T) {
 		UseMD5:          true,
 		UseResumeUpload: true,
 	})
+	Nil(t, err)
+}
+
+func TestResumePut2(t *testing.T) {
+	fname := "1M"
+	fd, _ := os.Create(fname)
+	NotNil(t, fd)
+	kb := strings.Repeat("U", 1025*2)
+	for i := 0; i < (minResumePutFileSize / 1024); i++ {
+		fd.WriteString(kb)
+	}
+	fd.Close()
+	schedulePath := fmt.Sprintf(".schedule_%s", fname)
+
+	headers := make(map[string]string)
+	headers["resumePut2"] = "true"
+
+	config := PutObjectConfig{
+		Path:            REST_FILE_1M,
+		LocalPath:       fname,
+		UseMD5:          true,
+		UseResumeUpload: true,
+		Headers:         headers,
+		ProcessFile:     schedulePath,
+	}
+
+	defer func() {
+		os.RemoveAll(fname)
+		os.RemoveAll(config.ProcessFile)
+	}()
+
+	err := up.Put2(&config)
 	Nil(t, err)
 }
 
@@ -338,4 +391,23 @@ func TestDelete(t *testing.T) {
 		Path: REST_DIR,
 	})
 	Nil(t, err)
+}
+
+func TestListObjects(t *testing.T) {
+	fpath := "/upyun"
+	config := &ListObjectsConfig{
+		Path:         fpath,
+		MaxListTries: 0,
+		DescOrder:    false,
+		Iter:         "",
+		Limit:        30,
+	}
+	fileInfos, iter, err := up.ListObjects(config)
+	if err != nil {
+		t.Logf("ls %s: %v", fpath, err)
+	}
+	for _, fInfo := range fileInfos {
+		t.Logf(fInfo.Name)
+	}
+	t.Log(iter)
 }
